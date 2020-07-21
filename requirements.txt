@@ -1,0 +1,14 @@
+numpy==1.19.0
+pandas==1.0.5
+opencv-python-headless==4.2.0.34
+tensorflow-gpu==1.15
+tqdm
+pyopencl==2019.1.2
+numba==0.50.1
+cffi==1.14.0
+Cython==0.29.15
+zmq
+pycapnp==0.6.4
+pyyaml==5.3.1
+pymap3d==2.4.1
+keras==2.3.1
