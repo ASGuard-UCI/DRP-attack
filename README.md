@@ -10,8 +10,10 @@ DRP-attack
 
 ### Installation
 
-- Clone this repository. Assume it is downloaded to 
-- Install dependencies `pip install -r requirements.txt`
+- Clone this repository. Assume this repositry is downloaded to `/foobar/DRP-attack/`.
+- Install dependencies 
+    - `cd /foobar/DRP-attack/`
+    - `pip install -r requirements.txt`
 - Clone OpenPilot v0.6.6 under DRP attack directory, i.e., `/foobar/DRP-attack/openpilot`.
     -  `git clone https://github.com/commaai/openpilot -b v0.6.6` 
 - Install capnp
@@ -36,4 +38,4 @@ python run_patch_generation.py data/scenarios/highway/sc1/config_left.json
 python run_patch_generation.py data/scenarios/highway/sc1/config_right.json
 ```
 
-For more detail, please check Tutorial notebook.
+You may also check Tutorial notebook.
