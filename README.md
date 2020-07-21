@@ -38,4 +38,4 @@ python run_patch_generation.py data/scenarios/highway/sc1/config_left.json
 python run_patch_generation.py data/scenarios/highway/sc1/config_right.json
 ```
 
-You may also check Tutorial notebook.
+You may also check Demo notebook.
