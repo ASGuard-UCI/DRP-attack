@@ -204,9 +204,13 @@ class AdamOpt:
 
 import pyopencl as cl
 for platform in cl.get_platforms():
-    device = platform.get_devices()[0]
+    devices = platform.get_devices()
     try:
-        ctx = cl.Context([device])
+        ctx = cl.Context([devices[0]])
+        break
+    except TypeError:
+        ctx = cl.Context([devices])
+        break
     except:
         continue
 queue = cl.CommandQueue(ctx)

@@ -8,9 +8,7 @@ import numpy as np
 from selfdrive.controls.lib.vehicle_model import (
     VehicleModel,
 )  # pylint: disable=import-error
-from selfdrive.controls.lib.pathplanner import (
-    PathPlanner,
-)  # pylint: disable=import-error
+from .pathplanner import PathPlanner
 
 from .utils.vehicle_control import VehicleControl, VehicleControlDBM
 from .utils.mock_latcontrol import MockLatControl

@@ -13,7 +13,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 try:
-    sys.path.append("/home/takamisato/openpilot/")
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/openpilot/")
 except:
     raise
 

@@ -26,6 +26,8 @@ DRP-attack
     - `cd /foobar/DRP-attack/openpilot/selfdrive/controls/lib/lateral_mpc`
     - `find ./ -name "*.o" | xargs rm`
     - `make all`
+- Install OpenCL
+    - `sudo apt install beignet-opencl-icd ocl-icd-libopencl1 clinfo`}
 
 ### Usage
 
