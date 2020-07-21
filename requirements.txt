@@ -3,7 +3,7 @@ pandas==1.0.5
 opencv-python-headless==4.2.0.34
 tensorflow-gpu==1.15
 tqdm
-pyopencl==2019.1.2
+pyopencl[pocl]==2019.1.2
 numba==0.50.1
 cffi==1.14.0
 Cython==0.29.15
