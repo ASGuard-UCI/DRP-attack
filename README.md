@@ -27,7 +27,7 @@ DRP-attack
     - `find ./ -name "*.o" | xargs rm`
     - `make all`
 - Install OpenCL
-    - `sudo apt install beignet-opencl-icd ocl-icd-libopencl1 clinfo`}
+    - `sudo apt install beignet-opencl-icd ocl-icd-libopencl1 clinfo`
 
 ### Usage
 
