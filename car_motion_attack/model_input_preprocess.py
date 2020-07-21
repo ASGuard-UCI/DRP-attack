@@ -102,7 +102,6 @@ class ModelInPreprocess:
         cl.enqueue_copy(queue, dist_u, dist_g_u)
         cl.enqueue_copy(queue, dist_v, dist_g_v)
 
-        np.save('aaa', dist_y)
 
         dist_yuv = np.zeros((MODEL_IMG_CH * MODEL_IMG_HEIGHT * MODEL_IMG_WIDTH), dtype=np.float32)
         dist_g_yuv = cl.Buffer(ctx, mf.WRITE_ONLY, dist_yuv.nbytes)
