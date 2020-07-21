@@ -1,7 +1,6 @@
 *~
 *.o
 openpilot/
-comma2k19/
 *.pyc
 .ipynb_checkpoints/
 .python-version
