@@ -21,7 +21,7 @@ DRP-attack
     - `sudo sh install_capnp.sh`
 - Compile messaging
     - `cd /foobar/DRP-attack/openpilot/selfdrive/messaging`
-    - `PYTHONPATH=$PYTHONPATH:/home/takamisato/lab_gpu/DRP-attack/openpilot/  make`
+    - `PYTHONPATH=$PYTHONPATH:/foobar/DRP-attack/openpilot/  make`
 - Compile libmpc
     - `cd /foobar/DRP-attack/openpilot/selfdrive/controls/lib/lateral_mpc`
     - `find ./ -name "*.o" | xargs rm`
