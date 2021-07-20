@@ -37,7 +37,6 @@ class ModelInPreprocess:
         self.mtx_frame2camera_uv_buf = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.mtx_frame2camera_uv)
 
     def visiond_prep(self, _yuv_img):
-        
         yuv_img = (_yuv_img * 128 + 128).clip(0, 255).astype(np.uint8)
         y = np.zeros((yuv_img.shape[0] * 2, yuv_img.shape[1] * 2), dtype=np.uint8)
 
@@ -102,6 +101,7 @@ class ModelInPreprocess:
         cl.enqueue_copy(queue, dist_u, dist_g_u)
         cl.enqueue_copy(queue, dist_v, dist_g_v)
 
+        #np.save('aaa', dist_y)
 
         dist_yuv = np.zeros((MODEL_IMG_CH * MODEL_IMG_HEIGHT * MODEL_IMG_WIDTH), dtype=np.float32)
         dist_g_yuv = cl.Buffer(ctx, mf.WRITE_ONLY, dist_yuv.nbytes)

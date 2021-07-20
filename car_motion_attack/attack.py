@@ -36,7 +36,7 @@ class CarMotionAttack:
         n_epoch=10000,
         model_path="data/model_keras_20191230_v0.7/driving_model.h5",
         # model_path="data/model_keras_20191125/driving_model.h5",
-        learning_rate_patch=1.0e-1,
+        learning_rate_patch=1.0e-2,
         learning_rate_color=1.0e-3,
         scale=1,
         result_dir='./result/',
@@ -218,33 +218,6 @@ class CarMotionAttack:
         starting_patch_epoch=None,
     ):
         logger.debug("enter")
-        # ops
-        self.ops_obj_shifting = sum(
-            loss_func(
-                self.tf_poly_inv,
-                self.list_tf_benign_outputs[i],
-                self.list_ops_predicts[i],
-                is_attack_to_rigth=self.is_attack_to_rigth
-            )
-            for i in tqdm(range(self.n_frames), desc="loss")
-        )
-
-        self.ops_obj_l2 = sum(
-            tf.nn.l2_loss(
-                tf.where(
-                    tf.is_nan(self.list_tf_model_patches[i]),
-                    tf.zeros_like(self.list_tf_model_patches[i]),
-                    self.list_tf_model_patches[i],
-                )
-            )
-            for i in range(self.n_frames)
-        )
-
-        self.ops_obj = self.ops_obj_shifting + (self.l2_weight * self.ops_obj_l2)
-
-        self.list_ops_gradients = tf.gradients(
-            self.ops_obj, self.list_tf_model_patches + [self.tf_base_color]
-        )
 
         # initialize car model
         self.car_motion.setup_masks(
@@ -254,33 +227,50 @@ class CarMotionAttack:
         # initialize tf variables
         self._init_tf_variables()
 
-        adam_patch = AdamOpt(
-            self.global_bev_purtabation.shape, lr=self.learning_rate_patch
-        )
-        # adam_color = AdamOpt(self.global_base_color.shape, lr=self.learning_rate_color)
         model_attack_outputs = None
-        if starting_patch_dir is not None:
-            self.global_bev_purtabation = np.load(
-                starting_patch_dir + f"_global_patch_{starting_patch_epoch}.npy"
-            )
-            self.masked_global_bev_purtabation = np.load(
-                starting_patch_dir + f"_global_masked_patch_{starting_patch_epoch}.npy"
-            )
-            self.global_base_color = np.load(
-                starting_patch_dir + f"_global_base_color_{starting_patch_epoch}.npy"
-            )
+
         self.sess.run(
             self.ops_base_color_update,
             feed_dict={self.yuv_color: self.global_base_color},
         )
+
         # optimization iteration
-        for epoch in tqdm(range(self.n_epoch)):
+        # for epoch in tqdm(range(self.n_epoch)):
+        epoch = 0
+        from skimage.draw import line
+        from itertools import product
+        from tqdm import tqdm
+        best_steer = 100000 if self.is_attack_to_rigth else - 100000
+        best_sol = None
+        for start, end in tqdm(list(product(
+            range(0, self.masked_global_bev_purtabation.shape[1], 10),
+            range(0, self.masked_global_bev_purtabation.shape[1], 10)
+        ))):
 
-            logger.debug("start {}".format(epoch))
+            patch_yuv = np.zeros(self.masked_global_bev_purtabation.shape) * np.nan
 
-            if epoch % 100 == 0:
-                adam_patch.lr *= 0.9
-                #adam_color.lr *= 0.9
+            for i in range(4):
+                rr, cc = line(0,
+                              start + i,
+                              self.masked_global_bev_purtabation.shape[0] - 1,
+                              end + i)
+                patch_yuv[rr, cc] = [1, 1, 1, 1, 0, 0]
+
+            list_patches = self.car_motion.conv_patch2model(
+                patch_yuv, self.global_base_color
+            )
+
+            [
+                self.sess.run(
+                    self.list_ops_patch_update[i],
+                    {
+                        self.buf_grad: np.expand_dims(
+                            list_patches[i].transpose((2, 0, 1)), axis=0  # transpose (H, W, ch) ->  (ch, H, W)
+                        )
+                    },
+                )
+                for i in range(self.n_frames)
+            ]
 
             logger.debug("calc model ouput")
             model_img_inputs = self.car_motion.calc_model_inputs()
@@ -348,110 +338,43 @@ class CarMotionAttack:
             self.car_motion.update_trajectory(
                 model_attack_outputs, start_steering_angle=starting_steering_angle, add_noise=True
             )
+            avg_steer = np.mean(self.car_motion.list_desired_steering_angle)
+            if self.is_attack_to_rigth:
+                if avg_steer < best_steer:
+                    best_steer = avg_steer
+                    best_sol = (start, end)
+            else:
+                if avg_steer > best_steer:
+                    best_steer = avg_steer
+                    best_sol = (start, end)
+            logger.info(f'AAAAAA {self.is_attack_to_rigth} {avg_steer} ({start}, {end}) {best_steer} {best_sol}')
 
-            logger.debug("calc gradients")
-            _grads = self.sess.run(self.list_ops_gradients)
+        patch_yuv = np.zeros(self.masked_global_bev_purtabation.shape) * np.nan
+        (start, end) = best_sol
+        for i in range(5):
+            rr, cc = line(0,
+                          start + i,
+                          self.masked_global_bev_purtabation.shape[0] - 1,
+                          end + i)
+            patch_yuv[rr, cc] = [1, 1, 1, 1, 0, 0]
 
-            list_var_grad = [g[0].transpose((1, 2, 0)) for g in _grads[:-1]]
-            base_color_grad = _grads[-1]
-            #base_color_grad[1:] = 0
+        np.save(
+            self.result_dir + f"_global_patch_{epoch}",
+            patch_yuv,
+        )
 
-            logger.debug("conv gradients -> patch")
-            logger.debug("agg patch grads")
-            patch_grad = self._agg_gradients(list_var_grad)
+        np.save(
+            self.result_dir + f"_global_masked_patch_{epoch}",
+            patch_yuv,
+        )
+        np.save(
+            self.result_dir + f"_global_base_color_{epoch}",
+            self.global_base_color,
+        )
 
-            logger.debug("update global purtabation")
+        model_imgs = np.vstack(self.sess.run(self.list_ops_model_img))
+        np.save(self.result_dir + f"model_img_inputs_{epoch}", model_imgs)
 
-            logger.debug(
-                f"global_base_color: {self.global_base_color} {base_color_grad}"
-            )
-
-            self.global_bev_purtabation -= adam_patch.update(patch_grad)
-            self.global_bev_purtabation = self.global_bev_purtabation.clip(
-                0, - self.base_color
-            )
-
-            self.global_bev_purtabation[:, :, 4:] = 0
-
-            patch_diff = self.global_bev_purtabation.sum(axis=2)
-            threshold = np.percentile(patch_diff, 100 - self.perturbable_area_ratio)
-            mask_bev_purtabation = patch_diff >= threshold
-
-            self.masked_global_bev_purtabation = self.global_bev_purtabation.copy()
-            self.masked_global_bev_purtabation[~mask_bev_purtabation] = 0.
-
-            if np.isnan(self.global_bev_purtabation.sum()):
-                raise Exception("patch encouter nan")
-
-            logger.debug("apply global purtabation to each frame")
-            list_patches = self.car_motion.conv_patch2model(
-                self.masked_global_bev_purtabation, self.global_base_color
-            )
-
-            [
-                self.sess.run(
-                    self.list_ops_patch_update[i],
-                    {
-                        self.buf_grad: np.expand_dims(
-                            list_patches[i].transpose((2, 0, 1)), axis=0  # transpose (H, W, ch) ->  (ch, H, W)
-                        )
-                    },
-                )
-                for i in range(self.n_frames)
-            ]
-            self.sess.run(
-                self.ops_base_color_update,
-                feed_dict={self.yuv_color: self.global_base_color},
-            )
-
-            if epoch % 100 == 0 and epoch > 0:
-                np.save(
-                    self.result_dir + f"_global_patch_{epoch}",
-                    self.global_bev_purtabation,
-                )
-
-                np.save(
-                    self.result_dir + f"_global_masked_patch_{epoch}",
-                    self.masked_global_bev_purtabation,
-                )
-                np.save(
-                    self.result_dir + f"_global_base_color_{epoch}",
-                    self.global_base_color,
-                )
-                np.save(
-                    self.result_dir + f"model_benign_img_inputs_{epoch}",
-                    model_img_inputs,
-                )
-
-                model_imgs = np.vstack(self.sess.run(self.list_ops_model_img))
-                np.save(
-                    self.result_dir + f"model_outputs_{epoch}", model_attack_outputs
-                )
-                np.save(self.result_dir + f"model_img_inputs_{epoch}", model_imgs)
-                np.save(self.result_dir + f"model_rnn_inputs_{epoch}", model_rnn_inputs)
-                try:
-                    objval = np.mean(self.sess.run([self.ops_obj]))
-                except:
-                    objval = -1
-                if np.isnan(objval):
-                    raise Exception("obj is nan")
-
-                logger.info(
-                    f"save epoch: {epoch + 1}, obj: {objval} total_lat: {self.car_motion.list_total_lateral_shift} desired: {self.car_motion.list_desired_steering_angle}"
-                )
-
-                if (
-                    (self.is_attack_to_rigth and self.car_motion.list_lateral_shift_openpilot[-1] < - self.target_deviation) or
-                    ((not self.is_attack_to_rigth)
-                     and self.car_motion.list_lateral_shift_openpilot[-1] > self.target_deviation)
-                ):
-                    logger.info(
-                        f"Reached target deviation: {epoch + 1}, obj: {objval} total_lat: {self.car_motion.list_lateral_shift_openpilot[-1]}"
-                    )
-                    self.last_epoch = epoch
-                    break
-                # with open(self.result_dir + f"car_motion_{epoch}.pkl", "wb") as f:
-                #    pickle.dump(self.car_motion, f, -1)
         self.last_epoch = epoch
         logger.debug("exit")
 
@@ -484,95 +407,59 @@ class CarMotionAttack:
             self.result_dir + f"_global_base_color_{epoch}.npy"
         )
         model_attack_outputs = None
-        for _ in range(10):
-            logger.debug("start {}".format(epoch))
-            logger.debug("calc model ouput")
-            list_patches = self.car_motion.conv_patch2model(
-                self.masked_global_bev_purtabation, self.global_base_color
-            )
-            # transpose (H, W, ch) ->  (ch, H, W)
-            [
-                self.sess.run(
-                    self.list_ops_patch_update[i],
-                    {
-                        self.buf_grad: np.expand_dims(
-                            list_patches[i].transpose((2, 0, 1)), axis=0
-                        )
-                    },
-                )
-                for i in range(self.n_frames)
-            ]
+
+        logger.debug("start {}".format(epoch))
+        logger.debug("calc model ouput")
+        list_patches = self.car_motion.conv_patch2model(
+            self.masked_global_bev_purtabation, self.global_base_color
+        )
+        # transpose (H, W, ch) ->  (ch, H, W)
+        [
             self.sess.run(
-                self.ops_base_color_update,
-                feed_dict={self.yuv_color: self.global_base_color},
+                self.list_ops_patch_update[i],
+                {
+                    self.buf_grad: np.expand_dims(
+                        list_patches[i].transpose((2, 0, 1)), axis=0
+                    )
+                },
             )
+            for i in range(self.n_frames)
+        ]
+        self.sess.run(
+            self.ops_base_color_update,
+            feed_dict={self.yuv_color: self.global_base_color},
+        )
 
-            model_img_inputs = self.car_motion.calc_model_inputs()
+        model_img_inputs = self.car_motion.calc_model_inputs()
 
-            model_rnn_inputs = []
-            model_outputs = []
+        model_rnn_inputs = []
+        model_outputs = []
+
+        def pred_generator():
             rnn_input = np.zeros(RNN_INPUT_SHAPE)
             desire_input = np.zeros(MODEL_DESIRE_INPUT_SHAPE)
             for i in range(self.n_frames):
+                model_img_nopatch = self.car_motion.calc_model_inputs_each(i).reshape(IMG_INPUT_SHAPE)
+                self.sess.run(
+                    self.list_ops_img_update[i],
+                    {self.buf_img: model_img_nopatch},
+                )
+                model_input = self.sess.run(self.list_ops_model_img[i])
                 model_output = self.model.predict(
                     [
-                        model_img_inputs[i].reshape(IMG_INPUT_SHAPE),
+                        model_input,
                         desire_input,
                         rnn_input,
                     ]
                 )
+                yield model_output[0]
                 model_outputs.append(model_output)
                 model_rnn_inputs.append(rnn_input)
                 rnn_input = model_output[:, -512:]
 
-            model_outputs = np.vstack(model_outputs)
-
-            logger.debug("update benign imgs")
-            [
-                self.sess.run(
-                    self.list_ops_img_update[i],
-                    {self.buf_img: model_img_inputs[i].reshape(IMG_INPUT_SHAPE)},
-                )
-                for i in range(self.n_frames)
-            ]
-
-            logger.debug("update benign rnn data")
-            if model_attack_outputs is None:
-                [
-                    self.sess.run(
-                        self.list_ops_rnn_update[i],
-                        {self.buf_rnn_data: model_rnn_inputs[i].reshape(RNN_INPUT_SHAPE)},
-                    )
-                    for i in range(self.n_frames)
-                ]
-            else:
-                [
-                    self.sess.run(
-                        self.list_ops_rnn_update[i],
-                        {self.buf_rnn_data: model_attack_outputs[i, -512:].reshape(RNN_INPUT_SHAPE)},
-                    )
-                    for i in range(self.n_frames)
-                ]
-
-            logger.debug("update benign model output")
-            [
-                self.sess.run(
-                    self.list_ops_output_update[i],
-                    {
-                        self.buf_model_output: model_outputs[i].reshape(
-                            MODEL_OUTPUT_SHAPE
-                        )
-                    },
-                )
-                for i in range(self.n_frames)
-            ]
-
-            logger.debug("update trajectory")
-            model_attack_outputs = np.vstack(self.sess.run(self.list_ops_predicts))
-
-            self.car_motion.update_trajectory(
-                model_attack_outputs, start_steering_angle=starting_steering_angle
-            )
+        self.car_motion.update_trajectory_gen(
+            pred_generator(), start_steering_angle=starting_steering_angle
+        )
 
         np.save(output_dir + f"_global_patch_{epoch}", self.global_bev_purtabation)
         np.save(

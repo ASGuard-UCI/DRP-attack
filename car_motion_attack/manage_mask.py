@@ -203,7 +203,7 @@ class FrameMask:
         )
         # mean_model_rgb = model_rgb.mean(axis=2)
         # model_rgb = np.stack([mean_model_rgb] * 3, axis=-1)
-        model_rgb = cv2.GaussianBlur(model_rgb, (5, 5), 0)
+        #model_rgb = cv2.GaussianBlur(model_rgb, (5, 5), 0)
         # model_rgb = cv2.blur(model_rgb, (5, 5))
 
         model_yuv = rgb2yuv(model_rgb)
@@ -211,7 +211,8 @@ class FrameMask:
         # model_yuv[:, :, :4] += np.random.normal(0, 0.01, size=model_yuv[:, :, :4].shape)
 
         model_yuv -= color_6ch
-        # model_yuv[:, :, 5:] *= 0 # keep nan is nan
+        model_yuv[:, :, 5:] *= 0 # keep nan is nan
+        model_yuv[:, :, :5] = model_yuv[:, :, :5].clip(0, - base_color[0])
         """
         model_yuv = cv2.warpPerspective(visible_patch_yuv,
                                    self.mat_patch2model,

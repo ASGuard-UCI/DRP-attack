@@ -234,9 +234,9 @@ class CarMotion:
                 lateral_shift = (
                     total_lateral_shift - self.df_sensors.loc[i, "lateral_shift"]
                 )
-                if add_noise:
-                    yaw_diff += np.random.normal(0, abs(yaw_diff * 1.0e-2))
-                    lateral_shift += np.random.normal(0, abs(lateral_shift * 1.0e-2))
+                # if add_noise:
+                #    yaw_diff += np.random.normal(0, abs(yaw_diff * 1.0e-2))
+                #    lateral_shift += np.random.normal(0, abs(lateral_shift * 1.0e-2))
 
                 if "lateral_shift_openpilot" in self.df_sensors:
                     lateral_shift_openpilot = (
@@ -246,11 +246,11 @@ class CarMotion:
                 else:
                     lateral_shift_openpilot = lateral_shift
 
-                if add_noise:
-                    long_noise = np.random.normal(0, 0.2)
-                    self.list_transform[i].update_perspective(lateral_shift, yaw_diff, long_noise)
-                else:
-                    self.list_transform[i].update_perspective(lateral_shift, yaw_diff)
+                # if add_noise:
+                #    long_noise = np.random.normal(0, 0.2)
+                #    self.list_transform[i].update_perspective(lateral_shift, yaw_diff, long_noise)
+                # else:
+                self.list_transform[i].update_perspective(lateral_shift, yaw_diff)
                 logger.info(
                     "{}: yaw_diff: {}, lateral_shift: {}, total_lateral_shift: {}, lateral_shift_openpilot: {}".format(
                         i,
@@ -268,6 +268,12 @@ class CarMotion:
 
             # update patch
             if add_noise:
+                # if np.random.random() < 0.5:
+                yaw_diff += np.random.uniform(-0.05, 0.05)
+                # if np.random.random() < 0.3:
+                lateral_shift += np.random.uniform(-0.1, 0.1)
+                # if np.random.random() < 0.3:
+                long_noise = np.random.uniform(-0.1, 0.1)
                 self.list_frame_mask[i].update_mask(lateral_shift, yaw_diff, long_noise)
             else:
                 self.list_frame_mask[i].update_mask(lateral_shift, yaw_diff)
@@ -332,6 +338,149 @@ class CarMotion:
 
         logger.debug("exit")
 
+    def update_trajectory_gen(
+        self, model_outs_gen, max_steering_angle_increase=0.25, start_steering_angle=None, add_noise=False
+    ):
+        logger.debug("enter")
+        vehicle_state = VehicleState()
+
+        if start_steering_angle is None:
+            current_steering_angle = 0
+        else:
+            current_steering_angle = start_steering_angle
+
+        vehicle_state.update_steer(current_steering_angle)
+
+        total_lateral_shift = 0
+        lateral_shift = 0
+        lateral_shift_openpilot = 0
+
+        yaw = 0
+        yaw_diff = 0
+        long_noise = 0
+        logger.info("current_steering_angle: {}".format(current_steering_angle))
+
+        list_total_lateral_shift = []
+        list_lateral_shift_openpilot = []
+        list_yaw = []
+        list_desired_steering_angle = []
+        list_current_steering_angle = []
+        list_state = []
+        ###
+
+        PF = PolyFuzz()
+        for i in range(self.n_frames):  # loop on 20Hz
+            # update camera perspective
+            if i > 0:
+                yaw_diff = yaw - self.df_sensors.loc[i, "yaw"]
+                lateral_shift = (
+                    total_lateral_shift - self.df_sensors.loc[i, "lateral_shift"]
+                )
+                # if add_noise:
+                #    yaw_diff += np.random.normal(0, abs(yaw_diff * 1.0e-2))
+                #    lateral_shift += np.random.normal(0, abs(lateral_shift * 1.0e-2))
+
+                if "lateral_shift_openpilot" in self.df_sensors:
+                    lateral_shift_openpilot = (
+                        total_lateral_shift
+                        - self.df_sensors.loc[i, "lateral_shift_openpilot"]
+                    )
+                else:
+                    lateral_shift_openpilot = lateral_shift
+
+                # if add_noise:
+                #    long_noise = np.random.normal(0, 0.2)
+                #    self.list_transform[i].update_perspective(lateral_shift, yaw_diff, long_noise)
+                # else:
+                self.list_transform[i].update_perspective(lateral_shift, yaw_diff)
+                logger.info(
+                    "{}: yaw_diff: {}, lateral_shift: {}, total_lateral_shift: {}, lateral_shift_openpilot: {}".format(
+                        i,
+                        yaw_diff,
+                        lateral_shift,
+                        total_lateral_shift,
+                        lateral_shift_openpilot,
+                    )
+                )
+                logger.info(
+                    "{}: current_yaw: {}, observed_yaw: {}, current_steering_angle: {}".format(
+                        i, yaw, self.df_sensors.loc[i, "yaw"], current_steering_angle
+                    )
+                )
+
+            # update patch
+            if add_noise:
+                if np.random.random() < 0.3:
+                    yaw_diff += np.random.uniform(-0.05, 0.05)
+                if np.random.random() < 0.3:
+                    lateral_shift += np.random.uniform(-0.1, 0.1)
+                if np.random.random() < 0.3:
+                    long_noise = np.random.uniform(-0.1, 0.1)
+                self.list_frame_mask[i].update_mask(lateral_shift, yaw_diff, long_noise)
+            else:
+                self.list_frame_mask[i].update_mask(lateral_shift, yaw_diff)
+
+            # update vehicle state
+            v_ego = self.df_sensors.loc[i, "speed"]
+            vehicle_state.update_velocity(v_ego)
+            vehicle_state.update_steer(current_steering_angle)
+
+            model_out = next(model_outs_gen)
+
+            valid, cost, angle, angle_steers_des_mpc = get_steer_angle(
+                PF, model_out, v_ego, current_steering_angle
+            )
+
+            if i == 0 and start_steering_angle is None:
+                current_steering_angle = angle_steers_des_mpc
+
+            logger.info(
+                "{}: valid: {}, cost: {}, angle: {}".format(i, valid, cost, angle)
+            )
+
+            logger.info(
+                "desired steering angle: {}, current steering angle: {}".format(
+                    angle_steers_des_mpc, current_steering_angle
+                )
+            )
+            # update steering angle
+            budget_steering_angle = angle_steers_des_mpc - current_steering_angle
+            for _ in range(PLAN_PER_PREDICT):  # loop on 100Hz
+                logger.debug(f"current_steering_angle 100Hz: {current_steering_angle}")
+                angle_change = np.clip(
+                    budget_steering_angle,
+                    -max_steering_angle_increase,
+                    max_steering_angle_increase,
+                )
+                current_steering_angle += angle_change
+                budget_steering_angle -= angle_change
+                if angle_steers_des_mpc - current_steering_angle > 0:
+                    budget_steering_angle = max(budget_steering_angle, 0)
+                else:
+                    budget_steering_angle = min(budget_steering_angle, 0)
+
+                state = vehicle_state.apply_plan(current_steering_angle)
+
+            total_lateral_shift = state.y
+            yaw = state.yaw
+
+            list_state.append(state)
+            list_yaw.append(yaw)
+            list_total_lateral_shift.append(total_lateral_shift)
+            list_lateral_shift_openpilot.append(lateral_shift_openpilot)
+
+            list_desired_steering_angle.append(angle_steers_des_mpc)
+            list_current_steering_angle.append(current_steering_angle)
+
+        self.list_state = list_state
+        self.list_yaw = list_yaw
+        self.list_total_lateral_shift = list_total_lateral_shift
+        self.list_desired_steering_angle = list_desired_steering_angle
+        self.list_current_steering_angle = list_current_steering_angle
+        self.list_lateral_shift_openpilot = list_lateral_shift_openpilot
+
+        logger.debug("exit")
+
     def calc_model_inputs(self):
         logger.debug("enter")
         # sky_area = np.zeros((SKY_HEIGHT, CAMERA_IMG_WIDTH, 3), dtype=np.uint8)
@@ -341,13 +490,15 @@ class CarMotion:
             # np.vstack([sky_area, p.shifted_roatated_camera_image])
             for p in self.list_transform
         ]
-
+        for img in list_trainsformed_camera_imgs:
+            self.model_preprocess.rgb_to_modelin(img)
         model_inputs = np.vstack(
             [
                 self.model_preprocess.rgb_to_modelin(img)
                 for img in list_trainsformed_camera_imgs
             ]
         )
+
         """
         model_inputs_c = np.vstack(
             [
@@ -365,6 +516,17 @@ class CarMotion:
             pickle.dump(model_inputs, f, -1)
         import pdb;pdb.set_trace()
         """
+        logger.debug("exit")
+        return model_inputs
+
+    def calc_model_inputs_each(self, i):
+        logger.debug("enter")
+        # sky_area = np.zeros((SKY_HEIGHT, CAMERA_IMG_WIDTH, 3), dtype=np.uint8)
+        p = self.list_transform[i]
+
+        trainsformed_camera_imgs = np.vstack([p.get_sky_img(mergin=30), p.shifted_roatated_camera_image[30:]])
+        model_inputs = self.model_preprocess.rgb_to_modelin(trainsformed_camera_imgs)
+
         logger.debug("exit")
         return model_inputs
 
