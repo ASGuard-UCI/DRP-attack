@@ -154,14 +154,15 @@ class CarMotionAttack:
 
         # ops
         self.list_ops_model_img = [
-            tf.where(
-                tf.is_nan(self.list_tf_model_patches[i]),
-                self.list_tf_model_imgs[i],
-                tf.clip_by_value(
+            tf.clip_by_value(
+                tf.where(
+                    tf.is_nan(self.list_tf_model_patches[i]),
+                    self.list_tf_model_imgs[i],
                     self.list_tf_model_patches[i] + self.ops_tiled_base_color,
-                    YUV_MIN,
-                    YUV_MAX,
-                ),
+                ) + tf.random.normal(self.list_tf_model_patches[i].shape, 0, 0.02),
+
+                YUV_MIN,
+                YUV_MAX,
             )
             for i in range(self.n_frames)
         ]
@@ -176,7 +177,59 @@ class CarMotionAttack:
             )
             for i in range(self.n_frames)
         ]
+        """
+        self.ops_obj_shifting = sum(
+            loss_func(
+                self.tf_poly_inv,
+                self.list_tf_benign_outputs[i],
+                self.list_ops_predicts[i],
+                is_attack_to_rigth=self.is_attack_to_rigth
+            )
+            for i in tqdm(range(self.n_frames), desc="loss")
+        )
 
+        # self.ops_obj_l1 = sum(
+        #    [
+        #        tf.abs(
+        #            tf.where(
+        #                tf.is_nan(self.list_tf_model_patches[i]),
+        #                tf.zeros_like(self.list_tf_model_patches[i]),
+        #                self.list_tf_model_patches[i],
+        #            )
+        #        )
+        #        for i in range(self.n_frames)
+        #    ]
+        # )
+
+        self.ops_obj_l2 = sum(
+            tf.nn.l2_loss(
+                tf.where(
+                    tf.is_nan(self.list_tf_model_patches[i]),
+                    tf.zeros_like(self.list_tf_model_patches[i]),
+                    self.list_tf_model_patches[i],
+                )
+            )
+            for i in range(self.n_frames)
+        )
+
+        # self.ops_obj_tvloss = sum(
+        #    tf.nn.l2_loss(
+        #        tf.where(
+        #            tf.is_nan(self.list_tf_model_patches[i]),
+        #            tf.zeros_like(self.list_tf_model_patches[i]),
+        #            self.list_tf_model_patches[i],
+        #        )
+        #    )
+        #    for i in range(self.n_frames)
+        # )
+
+        # + self.ops_obj_l1 * 0.01# + 0.01 * self.ops_obj_tvloss
+        self.ops_obj = self.ops_obj_shifting + (self.l2_weight * self.ops_obj_l2)
+
+        self.list_ops_gradients = tf.gradients(
+            self.ops_obj, self.list_tf_model_patches + [self.tf_base_color]
+        )
+        """
         self.list_ops_patch_update = [
             self.list_tf_model_patches[i].assign(self.buf_grad)
             for i in range(self.n_frames)
@@ -218,34 +271,6 @@ class CarMotionAttack:
         starting_patch_epoch=None,
     ):
         logger.debug("enter")
-        # ops
-        self.ops_obj_shifting = sum(
-            loss_func(
-                self.tf_poly_inv,
-                self.list_tf_benign_outputs[i],
-                self.list_ops_predicts[i],
-                is_attack_to_rigth=self.is_attack_to_rigth
-            )
-            for i in tqdm(range(self.n_frames), desc="loss")
-        )
-
-        self.ops_obj_l2 = sum(
-            tf.nn.l2_loss(
-                tf.where(
-                    tf.is_nan(self.list_tf_model_patches[i]),
-                    tf.zeros_like(self.list_tf_model_patches[i]),
-                    self.list_tf_model_patches[i],
-                )
-            )
-            for i in range(self.n_frames)
-        )
-
-        self.ops_obj = self.ops_obj_shifting + (self.l2_weight * self.ops_obj_l2)
-
-        self.list_ops_gradients = tf.gradients(
-            self.ops_obj, self.list_tf_model_patches + [self.tf_base_color]
-        )
-
         # initialize car model
         self.car_motion.setup_masks(
             lateral_shift=lateral_shift, starting_meters=starting_meters
@@ -429,10 +454,7 @@ class CarMotionAttack:
                 )
                 np.save(self.result_dir + f"model_img_inputs_{epoch}", model_imgs)
                 np.save(self.result_dir + f"model_rnn_inputs_{epoch}", model_rnn_inputs)
-                try:
-                    objval = np.mean(self.sess.run([self.ops_obj]))
-                except:
-                    objval = -1
+                objval = np.mean(self.sess.run([self.ops_obj]))
                 if np.isnan(objval):
                     raise Exception("obj is nan")
 
@@ -586,10 +608,9 @@ class CarMotionAttack:
         np.save(output_dir + f"model_outputs_{epoch}", model_attack_outputs)
         np.save(output_dir + f"model_img_inputs_{epoch}", model_imgs)
         np.save(output_dir + f"model_rnn_inputs_{epoch}", model_rnn_inputs)
-
         objval = -1  # np.mean(self.sess.run([self.ops_obj]))
-        if np.isnan(objval):
-            raise Exception("obj is nan")
+        # if np.isnan(objval):
+        #    raise Exception("obj is nan")
 
         logger.info(f"epoch: {epoch + 1}, obj: {objval}")
         # with open(output_dir + f"car_motion_{epoch}.pkl", "wb") as f:
