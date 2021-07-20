@@ -78,13 +78,37 @@ class ReplayBicycle:
             lateral_shift=lateral_shift, starting_meters=starting_meters
         )
         # self.list_ops_model_img = self.list_tf_model_imgs
+        model_rnn_inputs = []
+        model_outputs = []
+        def pred_generator():
+            rnn_input = np.zeros(RNN_INPUT_SHAPE)
+            desire_input = np.zeros(MODEL_DESIRE_INPUT_SHAPE)
+            for i in range(self.n_frames):
+                model_img_nopatch = self.car_motion.calc_model_inputs_each(i).reshape(IMG_INPUT_SHAPE)
+                model_output = self.model.predict(
+                    [
+                        model_img_nopatch,
+                        desire_input,
+                        rnn_input,
+                    ]
+                )
+                yield model_output[0]
+                model_outputs.append(model_output)
+                model_rnn_inputs.append(rnn_input)
+                rnn_input = model_output[:, -512:]
 
+        self.car_motion.update_trajectory_gen(
+            pred_generator(), start_steering_angle=start_steering_angle
+        )
+        """
         for _ in range(5):
             logger.debug("calc model ouput")
             model_img_inputs = self.car_motion.calc_model_inputs()
 
             model_rnn_inputs = []
             model_outputs = []
+
+
             rnn_input = np.zeros(RNN_INPUT_SHAPE)
             desire_input = np.zeros(MODEL_DESIRE_INPUT_SHAPE)
             for i in range(self.n_frames):
@@ -96,13 +120,14 @@ class ReplayBicycle:
                     ]
                 )
                 model_outputs.append(model_output)
-                rnn_input = model_output[:, -512:]
                 model_rnn_inputs.append(model_output[:, -512:])
 
             model_outputs = np.vstack(model_outputs)
             self.car_motion.update_trajectory(
                 model_outputs, start_steering_angle=start_steering_angle
             )
+        """
+
 
         #np.save('benign_model_in_1201', model_img_inputs)
         #np.save('benign_model_out_1201', model_outputs)

@@ -36,7 +36,7 @@ class CarMotionAttack:
         n_epoch=10000,
         model_path="data/model_keras_20191230_v0.7/driving_model.h5",
         # model_path="data/model_keras_20191125/driving_model.h5",
-        learning_rate_patch=1.0e-1,
+        learning_rate_patch=1.0e-2,
         learning_rate_color=1.0e-3,
         scale=1,
         result_dir='./result/',
@@ -240,7 +240,7 @@ class CarMotionAttack:
             for i in range(self.n_frames)
         )
 
-        self.ops_obj = self.ops_obj_shifting + (self.l2_weight * self.ops_obj_l2)
+        self.ops_obj = self.ops_obj_shifting + (self.l2_weight * self.ops_obj_l2) * (self.n_frames / 20)
 
         self.list_ops_gradients = tf.gradients(
             self.ops_obj, self.list_tf_model_patches + [self.tf_base_color]
@@ -283,6 +283,7 @@ class CarMotionAttack:
                 #adam_color.lr *= 0.9
 
             logger.debug("calc model ouput")
+
             model_img_inputs = self.car_motion.calc_model_inputs()
 
             model_rnn_inputs = []
@@ -346,7 +347,7 @@ class CarMotionAttack:
             model_attack_outputs = np.vstack(self.sess.run(self.list_ops_predicts))
 
             self.car_motion.update_trajectory(
-                model_attack_outputs, start_steering_angle=starting_steering_angle, add_noise=True
+                model_attack_outputs, start_steering_angle=starting_steering_angle, add_noise=epoch > 200
             )
 
             logger.debug("calc gradients")
@@ -484,95 +485,60 @@ class CarMotionAttack:
             self.result_dir + f"_global_base_color_{epoch}.npy"
         )
         model_attack_outputs = None
-        for _ in range(10):
-            logger.debug("start {}".format(epoch))
-            logger.debug("calc model ouput")
-            list_patches = self.car_motion.conv_patch2model(
-                self.masked_global_bev_purtabation, self.global_base_color
-            )
-            # transpose (H, W, ch) ->  (ch, H, W)
-            [
-                self.sess.run(
-                    self.list_ops_patch_update[i],
-                    {
-                        self.buf_grad: np.expand_dims(
-                            list_patches[i].transpose((2, 0, 1)), axis=0
-                        )
-                    },
-                )
-                for i in range(self.n_frames)
-            ]
+
+        logger.debug("start {}".format(epoch))
+        logger.debug("calc model ouput")
+        list_patches = self.car_motion.conv_patch2model(
+            self.masked_global_bev_purtabation, self.global_base_color
+        )
+        # transpose (H, W, ch) ->  (ch, H, W)
+        [
             self.sess.run(
-                self.ops_base_color_update,
-                feed_dict={self.yuv_color: self.global_base_color},
+                self.list_ops_patch_update[i],
+                {
+                    self.buf_grad: np.expand_dims(
+                        list_patches[i].transpose((2, 0, 1)), axis=0
+                    )
+                },
             )
+            for i in range(self.n_frames)
+        ]
+        self.sess.run(
+            self.ops_base_color_update,
+            feed_dict={self.yuv_color: self.global_base_color},
+        )
 
-            model_img_inputs = self.car_motion.calc_model_inputs()
+        model_img_inputs = self.car_motion.calc_model_inputs()
 
-            model_rnn_inputs = []
-            model_outputs = []
+        model_rnn_inputs = []
+        model_outputs = []
+
+        
+        def pred_generator():
             rnn_input = np.zeros(RNN_INPUT_SHAPE)
             desire_input = np.zeros(MODEL_DESIRE_INPUT_SHAPE)
             for i in range(self.n_frames):
+                model_img_nopatch = self.car_motion.calc_model_inputs_each(i).reshape(IMG_INPUT_SHAPE)
+                self.sess.run(
+                    self.list_ops_img_update[i],
+                    {self.buf_img: model_img_nopatch},
+                )
+                model_input = self.sess.run(self.list_ops_model_img[i])
                 model_output = self.model.predict(
                     [
-                        model_img_inputs[i].reshape(IMG_INPUT_SHAPE),
+                        model_input,
                         desire_input,
                         rnn_input,
                     ]
                 )
+                yield model_output[0]
                 model_outputs.append(model_output)
                 model_rnn_inputs.append(rnn_input)
                 rnn_input = model_output[:, -512:]
 
-            model_outputs = np.vstack(model_outputs)
-
-            logger.debug("update benign imgs")
-            [
-                self.sess.run(
-                    self.list_ops_img_update[i],
-                    {self.buf_img: model_img_inputs[i].reshape(IMG_INPUT_SHAPE)},
-                )
-                for i in range(self.n_frames)
-            ]
-
-            logger.debug("update benign rnn data")
-            if model_attack_outputs is None:
-                [
-                    self.sess.run(
-                        self.list_ops_rnn_update[i],
-                        {self.buf_rnn_data: model_rnn_inputs[i].reshape(RNN_INPUT_SHAPE)},
-                    )
-                    for i in range(self.n_frames)
-                ]
-            else:
-                [
-                    self.sess.run(
-                        self.list_ops_rnn_update[i],
-                        {self.buf_rnn_data: model_attack_outputs[i, -512:].reshape(RNN_INPUT_SHAPE)},
-                    )
-                    for i in range(self.n_frames)
-                ]
-
-            logger.debug("update benign model output")
-            [
-                self.sess.run(
-                    self.list_ops_output_update[i],
-                    {
-                        self.buf_model_output: model_outputs[i].reshape(
-                            MODEL_OUTPUT_SHAPE
-                        )
-                    },
-                )
-                for i in range(self.n_frames)
-            ]
-
-            logger.debug("update trajectory")
-            model_attack_outputs = np.vstack(self.sess.run(self.list_ops_predicts))
-
-            self.car_motion.update_trajectory(
-                model_attack_outputs, start_steering_angle=starting_steering_angle
-            )
+        self.car_motion.update_trajectory_gen(
+            pred_generator(), start_steering_angle=starting_steering_angle
+        )
 
         np.save(output_dir + f"_global_patch_{epoch}", self.global_bev_purtabation)
         np.save(
