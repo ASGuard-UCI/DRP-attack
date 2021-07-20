@@ -3,17 +3,18 @@ from __future__ import print_function
 import math
 import numpy as np
 
-#from selfdrive.car.car_helpers import interfaces  # pylint: disable=import-error
-
+from selfdrive.car.car_helpers import interfaces  # pylint: disable=import-error
 from selfdrive.controls.lib.vehicle_model import (
     VehicleModel,
 )  # pylint: disable=import-error
-from .pathplanner import PathPlanner
+from selfdrive.controls.lib.pathplanner import (
+    PathPlanner,
+)  # pylint: disable=import-error
 
-from .utils.vehicle_control import VehicleControl, VehicleControlDBM
-from .utils.mock_latcontrol import MockLatControl
-from .utils.parse_model_output import parse_model_output
-from .mock.interface import CarInterface
+from car_motion_attack.polyfuzz.utils.vehicle_control import VehicleControl, VehicleControlDBM
+from car_motion_attack.polyfuzz.utils.mock_latcontrol import MockLatControl
+from car_motion_attack.polyfuzz.utils.parse_model_output import parse_model_output
+
 
 def steer_angle_to_wheel_radian(steer_angle, steer_ratio):
     return math.radians(steer_angle) / steer_ratio
@@ -33,8 +34,8 @@ class ModelOutput:
 
 class PolyFuzz(object):
     def __init__(self, v0=20.0):
-        #interface_cls = interfaces["mock"]  # TOYOTA RAV4 HYBRID 2017
-        self.CP = CarInterface.get_params("mock", None)  # Car Parameters
+        interface_cls = interfaces["mock"]  # TOYOTA RAV4 HYBRID 2017
+        self.CP = interface_cls[0].get_params("mock", None)  # Car Parameters
         self.VM = VehicleModel(self.CP)  # Vehicle Model
         # self.CI = interface_cls(self.CP, False)     # Car Interface
         # # Set dummy car state
@@ -72,7 +73,8 @@ class PolyFuzz(object):
 
 class VehicleState(object):
     def __init__(self, v0=20.0, freq=100, yaw=0.0, model=VehicleControl):
-        self.CP = self.CP = CarInterface.get_params("mock", None)
+        interface_cls = interfaces["mock"][0]  # TOYOTA RAV4 HYBRID 2017
+        self.CP = interface_cls.get_params("mock", None)  # Car Parameters
         #self.CP.wheelbase = 3
         #self.CP.steerRatio = 20
         self.VM = VehicleModel(self.CP)  # Vehicle Model

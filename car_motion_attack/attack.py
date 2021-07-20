@@ -1,4 +1,7 @@
 import os
+import sys
+from PIL import Image
+import io
 import pickle
 from logging import getLogger
 
@@ -11,7 +14,7 @@ from tqdm import tqdm
 from car_motion_attack.config import MODEL_IMG_HEIGHT, MODEL_IMG_WIDTH
 from car_motion_attack.car_motion import CarMotion
 from car_motion_attack.load_sensor_data import load_sensor_data
-from car_motion_attack.utils import AdamOpt
+from car_motion_attack.utils import AdamOpt, yuv2rgb, rgb2yuv
 from car_motion_attack.models import create_model
 from car_motion_attack.replay_bicycle import ReplayBicycle
 from car_motion_attack.loss import compute_path_pinv, loss_func
@@ -20,7 +23,7 @@ from car_motion_attack.config import (DTYPE, PIXELS_PER_METER, SKY_HEIGHT, IMG_I
                                       MODEL_DESIRE_INPUT_SHAPE, MODEL_OUTPUT_SHAPE,
                                       YUV_MIN, YUV_MAX
                                       )
-
+from scipy import ndimage
 logger = getLogger(None)
 
 
@@ -98,6 +101,18 @@ class CarMotionAttack:
 
         self._create_tf_variables()
 
+        from car_motion_attack.magnet import DenoisingAutoEncoder, MAP_MAGNET, IMG_CROP_HEIGHT, IMG_CROP_WIDTH
+        tmp = DenoisingAutoEncoder((IMG_CROP_HEIGHT, IMG_CROP_WIDTH, 3),                                                                                                                                           
+                            MAP_MAGNET[sys.argv[2]]['model'],     
+                            model_dir=MAP_MAGNET[sys.argv[2]]['path'],                                                                                                                            
+                            v_noise=0.1,                                                                                                                                                                    
+                            activation='relu',                                                                                                                                                              
+                            reg_strength=1e-9)
+
+        tmp.load('best_weights.hdf5')
+        self.magnet_model = tmp.model
+
+        
     def _create_tf_variables(self):
         # placeholders
         self.buf_img = tf.placeholder(DTYPE, shape=IMG_INPUT_SHAPE)
@@ -176,7 +191,59 @@ class CarMotionAttack:
             )
             for i in range(self.n_frames)
         ]
+        """
+        self.ops_obj_shifting = sum(
+            loss_func(
+                self.tf_poly_inv,
+                self.list_tf_benign_outputs[i],
+                self.list_ops_predicts[i],
+                is_attack_to_rigth=self.is_attack_to_rigth
+            )
+            for i in tqdm(range(self.n_frames), desc="loss")
+        )
 
+        # self.ops_obj_l1 = sum(
+        #    [
+        #        tf.abs(
+        #            tf.where(
+        #                tf.is_nan(self.list_tf_model_patches[i]),
+        #                tf.zeros_like(self.list_tf_model_patches[i]),
+        #                self.list_tf_model_patches[i],
+        #            )
+        #        )
+        #        for i in range(self.n_frames)
+        #    ]
+        # )
+
+        self.ops_obj_l2 = sum(
+            tf.nn.l2_loss(
+                tf.where(
+                    tf.is_nan(self.list_tf_model_patches[i]),
+                    tf.zeros_like(self.list_tf_model_patches[i]),
+                    self.list_tf_model_patches[i],
+                )
+            )
+            for i in range(self.n_frames)
+        )
+
+        # self.ops_obj_tvloss = sum(
+        #    tf.nn.l2_loss(
+        #        tf.where(
+        #            tf.is_nan(self.list_tf_model_patches[i]),
+        #            tf.zeros_like(self.list_tf_model_patches[i]),
+        #            self.list_tf_model_patches[i],
+        #        )
+        #    )
+        #    for i in range(self.n_frames)
+        # )
+
+        # + self.ops_obj_l1 * 0.01# + 0.01 * self.ops_obj_tvloss
+        self.ops_obj = self.ops_obj_shifting + (self.l2_weight * self.ops_obj_l2)
+
+        self.list_ops_gradients = tf.gradients(
+            self.ops_obj, self.list_tf_model_patches + [self.tf_base_color]
+        )
+        """
         self.list_ops_patch_update = [
             self.list_tf_model_patches[i].assign(self.buf_grad)
             for i in range(self.n_frames)
@@ -218,34 +285,6 @@ class CarMotionAttack:
         starting_patch_epoch=None,
     ):
         logger.debug("enter")
-        # ops
-        self.ops_obj_shifting = sum(
-            loss_func(
-                self.tf_poly_inv,
-                self.list_tf_benign_outputs[i],
-                self.list_ops_predicts[i],
-                is_attack_to_rigth=self.is_attack_to_rigth
-            )
-            for i in tqdm(range(self.n_frames), desc="loss")
-        )
-
-        self.ops_obj_l2 = sum(
-            tf.nn.l2_loss(
-                tf.where(
-                    tf.is_nan(self.list_tf_model_patches[i]),
-                    tf.zeros_like(self.list_tf_model_patches[i]),
-                    self.list_tf_model_patches[i],
-                )
-            )
-            for i in range(self.n_frames)
-        )
-
-        self.ops_obj = self.ops_obj_shifting + (self.l2_weight * self.ops_obj_l2)
-
-        self.list_ops_gradients = tf.gradients(
-            self.ops_obj, self.list_tf_model_patches + [self.tf_base_color]
-        )
-
         # initialize car model
         self.car_motion.setup_masks(
             lateral_shift=lateral_shift, starting_meters=starting_meters
@@ -429,10 +468,7 @@ class CarMotionAttack:
                 )
                 np.save(self.result_dir + f"model_img_inputs_{epoch}", model_imgs)
                 np.save(self.result_dir + f"model_rnn_inputs_{epoch}", model_rnn_inputs)
-                try:
-                    objval = np.mean(self.sess.run([self.ops_obj]))
-                except:
-                    objval = -1
+                objval = np.mean(self.sess.run([self.ops_obj]))
                 if np.isnan(objval):
                     raise Exception("obj is nan")
 
@@ -484,24 +520,13 @@ class CarMotionAttack:
             self.result_dir + f"_global_base_color_{epoch}.npy"
         )
         model_attack_outputs = None
-        for _ in range(10):
+
+        for _ in range(5):
             logger.debug("start {}".format(epoch))
             logger.debug("calc model ouput")
             list_patches = self.car_motion.conv_patch2model(
                 self.masked_global_bev_purtabation, self.global_base_color
             )
-            # transpose (H, W, ch) ->  (ch, H, W)
-            [
-                self.sess.run(
-                    self.list_ops_patch_update[i],
-                    {
-                        self.buf_grad: np.expand_dims(
-                            list_patches[i].transpose((2, 0, 1)), axis=0
-                        )
-                    },
-                )
-                for i in range(self.n_frames)
-            ]
             self.sess.run(
                 self.ops_base_color_update,
                 feed_dict={self.yuv_color: self.global_base_color},
@@ -526,6 +551,21 @@ class CarMotionAttack:
                 rnn_input = model_output[:, -512:]
 
             model_outputs = np.vstack(model_outputs)
+
+            def magnet_defense(img, patch):
+                _img = np.where(np.isnan(patch), img.reshape(IMG_INPUT_SHAPE)[0].transpose((1, 2, 0)), patch)
+                rgb = yuv2rgb(_img) / 255 #.astype(np.uint8)
+                rgb = self.magnet_model.predict(np.expand_dims(rgb, axis=0))[0] * 255
+                yuv = rgb2yuv(rgb.astype(np.uint8))
+                _patch = np.where(~np.isnan(patch), yuv, np.nan)
+                return yuv.transpose((2, 0, 1)).flatten(), _patch
+
+            tmp = [
+                magnet_defense(model_img_inputs[i], list_patches[i])
+                for i in range(self.n_frames)
+            ]
+            model_img_inputs = [t[0] for t in tmp]
+            list_patches = [t[1] for t in tmp]
 
             logger.debug("update benign imgs")
             [
@@ -566,7 +606,20 @@ class CarMotionAttack:
                 )
                 for i in range(self.n_frames)
             ]
+            logger.debug("update patch")
 
+            # transpose (H, W, ch) ->  (ch, H, W)
+            [
+                self.sess.run(
+                    self.list_ops_patch_update[i],
+                    {
+                        self.buf_grad: np.expand_dims(
+                            list_patches[i].transpose((2, 0, 1)), axis=0
+                        )
+                    },
+                )
+                for i in range(self.n_frames)
+            ]
             logger.debug("update trajectory")
             model_attack_outputs = np.vstack(self.sess.run(self.list_ops_predicts))
 
@@ -586,10 +639,9 @@ class CarMotionAttack:
         np.save(output_dir + f"model_outputs_{epoch}", model_attack_outputs)
         np.save(output_dir + f"model_img_inputs_{epoch}", model_imgs)
         np.save(output_dir + f"model_rnn_inputs_{epoch}", model_rnn_inputs)
-
         objval = -1  # np.mean(self.sess.run([self.ops_obj]))
-        if np.isnan(objval):
-            raise Exception("obj is nan")
+        # if np.isnan(objval):
+        #    raise Exception("obj is nan")
 
         logger.info(f"epoch: {epoch + 1}, obj: {objval}")
         # with open(output_dir + f"car_motion_{epoch}.pkl", "wb") as f:
