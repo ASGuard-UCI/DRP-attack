@@ -1,5 +1,6 @@
 from logging import getLogger
-
+from PIL import Image
+import io
 import cv2
 import numpy as np
 
@@ -10,7 +11,7 @@ from car_motion_attack.model_output_postprocess import postprocess
 
 from car_motion_attack.polyfuzz.polyfuzz import PolyFuzz, VehicleState
 from car_motion_attack.polyfuzz.utils.parse_model_output import parse_model_output
-from car_motion_attack.utils import warp_corners, yuv2rgb
+from car_motion_attack.utils import warp_corners, yuv2rgb, rgb2yuv
 from car_motion_attack.config import (
     CAMERA_IMG_HEIGHT,
     CAMERA_IMG_WIDTH,
@@ -349,21 +350,26 @@ class CarMotion:
             ]
         )
         """
-        model_inputs_c = np.vstack(
+        model_inputs = [
+            self.model_preprocess.rgb_to_modelin(img)
+            for img in list_trainsformed_camera_imgs
+        ]
+
+        def jpeg(img):
+            rgb = yuv2rgb(img.reshape(MODEL_IMG_HEIGHT, MODEL_IMG_WIDTH, 6)).astype(np.uint8)
+            tmp = io.BytesIO()
+            Image.fromarray(rgb).save(tmp, format='jpeg')
+            img = np.array(Image.open(tmp))
+            yuv = rgb2yuv(img).flatten()
+            return yuv
+
+        model_inputs = np.vstack(
             [
-                self.model_preprocess_c.rgb_to_modelin(img)
-                for img in list_trainsformed_camera_imgs
+                jpeg(img)
+                for img in model_inputs
             ]
         )
-
-        for i in range(self.n_frames):
-            print(np.abs(model_inputs_c[i] - model_inputs[i]).max())
-        import pickle
-        with open('modelin_debug_c.pkl', 'wb') as f:
-            pickle.dump(model_inputs_c, f, -1)
-        with open('modelin_debug_p.pkl', 'wb') as f:
-            pickle.dump(model_inputs, f, -1)
-        import pdb;pdb.set_trace()
+        ]
         """
         logger.debug("exit")
         return model_inputs
