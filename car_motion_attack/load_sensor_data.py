@@ -4,7 +4,7 @@ import cv2
 from logging import getLogger
 import pymap3d as pm
 
-
+from tools.lib.logreader import LogReader
 import comma2k19.orientation as orient
 
 from car_motion_attack.polyfuzz.polyfuzz import VehicleState
@@ -15,8 +15,7 @@ logger = getLogger(__name__)
 
 
 def load_transform_matrix(path, start_time):
-    # openpilot tools 
-    from tools.lib.logreader import LogReader
+
     raw_log = LogReader(path)
     ext_mat = None
     for l in raw_log:

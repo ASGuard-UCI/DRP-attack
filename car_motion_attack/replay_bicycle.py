@@ -1,4 +1,7 @@
 import pickle
+from PIL import Image
+import io
+import sys
 import os
 from logging import getLogger
 import numpy as np
@@ -11,13 +14,14 @@ from car_motion_attack.models import create_model
 
 from car_motion_attack.load_sensor_data import load_sensor_data
 from car_motion_attack.car_motion import CarMotion
+from car_motion_attack.utils import yuv2rgb, rgb2yuv
 from car_motion_attack.config import (DTYPE, PIXELS_PER_METER, SKY_HEIGHT, IMG_INPUT_SHAPE,
                                       IMG_INPUT_MASK_SHAPE, RNN_INPUT_SHAPE,
                                       MODEL_DESIRE_INPUT_SHAPE, MODEL_OUTPUT_SHAPE,
                                       YUV_MIN, YUV_MAX, MODEL_IMG_HEIGHT, MODEL_IMG_WIDTH
                                       )
 
-
+from scipy import ndimage
 logger = getLogger(None)
 
 
@@ -96,16 +100,63 @@ class ReplayBicycle:
                     ]
                 )
                 model_outputs.append(model_output)
-                rnn_input = model_output[:, -512:]
                 model_rnn_inputs.append(model_output[:, -512:])
-
+                rnn_input = model_output[:, -512:]
             model_outputs = np.vstack(model_outputs)
             self.car_motion.update_trajectory(
                 model_outputs, start_steering_angle=start_steering_angle
             )
 
-        #np.save('benign_model_in_1201', model_img_inputs)
-        #np.save('benign_model_out_1201', model_outputs)
-        #print("AAA", self.car_motion.list_total_lateral_shift)
+        logger.debug("exit")
+        return self.car_motion
+
+    def run_jpeg(self, lateral_shift=4, starting_meters=60, start_steering_angle=None):
+        logger.debug("enter")
+        # initialize car model
+        self.car_motion.setup_masks(
+            lateral_shift=lateral_shift, starting_meters=starting_meters
+        )
+        # self.list_ops_model_img = self.list_tf_model_imgs
+
+        for _ in range(5):
+            logger.debug("calc model ouput")
+            model_img_inputs = self.car_motion.calc_model_inputs()
+            """
+            def jpeg_defense(img):
+                rgb = yuv2rgb(img.reshape(IMG_INPUT_SHAPE)[0].transpose((1, 2, 0))).astype(np.uint8)
+                tmp = io.BytesIO()
+                Image.fromarray(rgb).save(tmp, format='jpeg', quality=30)
+                _img = np.array(Image.open(tmp))
+                yuv = rgb2yuv(_img)
+                return yuv.transpose((2, 0, 1)).flatten()
+            """
+            def blurring_defense(img, ksize=int(sys.argv[2])):
+                rgb = yuv2rgb(img.reshape(IMG_INPUT_SHAPE)[0].transpose((1, 2, 0))).astype(np.uint8)
+                rgb = ndimage.filters.median_filter(rgb, size=(ksize, ksize, 1), mode='reflect')
+                yuv = rgb2yuv(rgb.astype(np.uint8))
+                return yuv.transpose((2, 0, 1)).flatten()
+
+            model_img_inputs = [blurring_defense(a) for a in model_img_inputs]
+
+            model_rnn_inputs = []
+            model_outputs = []
+            rnn_input = np.zeros(RNN_INPUT_SHAPE)
+            desire_input = np.zeros(MODEL_DESIRE_INPUT_SHAPE)
+            for i in range(self.n_frames):
+                model_output = self.model.predict(
+                    [
+                        model_img_inputs[i].reshape(IMG_INPUT_SHAPE),
+                        desire_input,
+                        rnn_input,
+                    ]
+                )
+                model_outputs.append(model_output)
+                model_rnn_inputs.append(model_output[:, -512:])
+                rnn_input = model_output[:, -512:]
+            model_outputs = np.vstack(model_outputs)
+            self.car_motion.update_trajectory(
+                model_outputs, start_steering_angle=start_steering_angle
+            )
+
         logger.debug("exit")
         return self.car_motion
