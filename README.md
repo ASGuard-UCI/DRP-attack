@@ -65,8 +65,13 @@ python run_patch_generation.py data/scenarios/${road_type}/sc${scenario_number}/
 
 The code for each defenses and baseline attacks is in the following branch.
 
-* TBA
-* TBA
+* baseline_drawing_lane_line
+* baseline_single_frame_eot
+* defense_autoencoder
+* defense_bit_depth_reduction
+* defense_gaussian_noise
+* defense_jpeg_compression
+* defense_median_blur
 
 ## Physical-World Miniature-Scale Experiments
 
