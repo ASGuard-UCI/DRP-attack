@@ -1,7 +1,9 @@
 # DRP-attack
 
-This repository holds the source code for Dirty Road Patch (DRP) attack, a novel domain-specific adversarial attacks against Automated Lane Centering (ALC) system proposed in the paper([proceeding](https://www.usenix.org/conference/usenixsecurity21/presentation/sato), [extended version](https://arxiv.org/abs/2009.06701)) "_Dirty Road Can Attack: Security of Deep Learning based Automated Lane Centering under Physical-World Attack_", by Takami Sato, Junjie Shen, and Ningfei Wang (University of California, Irvine); Yunhan Jia (ByteDance); Xue Lin (Northeastern University); Qi Alfred Chen (University of California, Irvine). For attack demos and more results, please refer to [our project website](https://sites.google.com/view/cav-sec/drp-attack/).
+This repository holds the source code for Dirty Road Patch (DRP) attack, a novel domain-specific adversarial attacks against Automated Lane Centering (ALC) system proposed in the paper([proceedings](https://www.usenix.org/conference/usenixsecurity21/presentation/sato), [extended version](https://arxiv.org/abs/2009.06701)) "_Dirty Road Can Attack: Security of Deep Learning based Automated Lane Centering under Physical-World Attack_", by Takami Sato, Junjie Shen, and Ningfei Wang (University of California, Irvine); Yunhan Jia (ByteDance); Xue Lin (Northeastern University); Qi Alfred Chen (University of California, Irvine). For attack demos and more results, please refer to [our project website](https://sites.google.com/view/cav-sec/drp-attack/).
 
+<img src="./data/overview.png" width=420px>
+<img src="./data/attack_demo.png" width=432px>
 
 # Requierment
 
