@@ -15,11 +15,11 @@ This repository holds the source code for Dirty Road Patch (DRP) attack, a novel
 # Installation
 
 - Clone this repository. Assume this repositry is downloaded to `/foobar/DRP-attack/`.
-- Install dependencies 
+- Install dependencies
     - `cd /foobar/DRP-attack/`
     - `pip install -r requirements.txt`
 - Clone OpenPilot v0.6.6 under DRP attack directory, i.e., `/foobar/DRP-attack/openpilot`.
-    -  `git clone https://github.com/commaai/openpilot -b v0.6.6` 
+    -  `git clone https://github.com/commaai/openpilot -b v0.6.6`
 - Install capnp
     - `cd /foobar/DRP-attack/openpilot/phonelibs`
     - `sudo sh install_capnp.sh`
@@ -53,7 +53,7 @@ You may also check Demo notebook `Demo.ipynb`.
 
 * Download comma2k19 dataset as described in https://github.com/commaai/comma2k19.
 * Place the driving traces of 40 scenarios (20 highway and 20 local) in the `data/scenario/` directory like `data/scenarios/highway/sc1/`.
-    * The path to each scenario is in `data/realworld_trace_scenarios.csv` 
+    * The path to each scenario is in `data/realworld_trace_scenarios.csv`
     * The configuration of each scenario is in `realworld_trace_configs.zip`
 * Run the experiments for all scenarios. Please set `road_type` and `scenario_number`.
 ```bash
@@ -88,7 +88,7 @@ The code for each defenses and baseline attacks is in the following branch.
 * Convert the obtained patch with the color mapping to handle the difference between printed color and observed color.
     * Apply the same methodology described in `Color_map_creation_for_physical_world_exp.ipynb`.
 * Place the obtained  in LGSVL simulator and run OpenPilot with LGSVL bridge.
-    * Detailed setups are descrived in the [OpenPilot-LGSVL bridge repository](https://github.com/ASGuard-UCI/openpilot_0.6.6/blob/master/README_DRP_ATTACK.md).
+    * Detailed setups are descrived in the [OpenPilot-LGSVL bridge repository](https://github.com/ASGuard-UCI/openpilot/blob/lgsvl_bridge/README_DRP_ATTACK.md).
 
 
 
