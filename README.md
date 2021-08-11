@@ -102,3 +102,7 @@ The code for each defenses and baseline attacks is in the following branch.
   year={2021}
 }
 ```
+
+# Acknowledgement
+
+Great thanks to [OpenPilot](https://github.com/commaai/openpilot), [Comma2k19 dataset](https://github.com/commaai/comma2k19), [TensorFlow](https://github.com/tensorflow/tensorflow), and all other libraries we use.
