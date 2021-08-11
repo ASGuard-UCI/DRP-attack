@@ -83,7 +83,7 @@ The code for each defenses and baseline attacks is in the following branch.
 
 ## Software-in-the-Loop Simulation
 
-* Generate a patch with this DRP attack code as in real-World trace-based evaluation.
+* Generate a patch with this DRP attack code as in real-world trace-based evaluation.
 * Convert the obtained patch with the color mapping to handle the difference between printed color and observed color.
     * Apply the same methodology described in `Color_map_creation_for_physical_world_exp.ipynb`.
 * Place the obtained  in LGSVL simulator and run OpenPilot with LGSVL bridge.
