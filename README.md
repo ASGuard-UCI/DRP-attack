@@ -1,6 +1,6 @@
 # DRP-attack
 
-This repository holds the source code for Dirty Road Patch (DRP) attack, a novel domain-specific adversarial attacks against Automated Lane Centering (ALC) system proposed in the paper([proceedings](https://www.usenix.org/conference/usenixsecurity21/presentation/sato), [extended version](https://arxiv.org/abs/2009.06701)) "_Dirty Road Can Attack: Security of Deep Learning based Automated Lane Centering under Physical-World Attack_", by Takami Sato, Junjie Shen, and Ningfei Wang (University of California, Irvine); Yunhan Jia (ByteDance); Xue Lin (Northeastern University); Qi Alfred Chen (University of California, Irvine). For attack demos and more results, please refer to [our project website](https://sites.google.com/view/cav-sec/drp-attack/).
+This repository hosts the source code for Dirty Road Patch (DRP) attack, a novel domain-specific adversarial attacks against Automated Lane Centering (ALC) system proposed in the paper ([proceedings](https://www.usenix.org/conference/usenixsecurity21/presentation/sato), [extended version](https://arxiv.org/abs/2009.06701)) "_Dirty Road Can Attack: Security of Deep Learning based Automated Lane Centering under Physical-World Attack_", by Takami Sato, Junjie Shen, and Ningfei Wang (University of California, Irvine); Yunhan Jia (ByteDance); Xue Lin (Northeastern University); Qi Alfred Chen (University of California, Irvine). For attack demos and more results, please refer to [our project website](https://sites.google.com/view/cav-sec/drp-attack/).
 
 <img src="./data/overview.png" width=410px><img src="./data/attack_demo.png" width=420px>
 
@@ -34,12 +34,12 @@ This repository holds the source code for Dirty Road Patch (DRP) attack, a novel
 
 # Usage
 
-This repository has a highway scenarios.
+This repository contains a highway scenario.
 
 ```bash
-### attack to left
+### attack to the left
 python run_patch_generation.py data/scenarios/highway/sc1/config_left.json
-### attakc to right
+### attack to the right
 python run_patch_generation.py data/scenarios/highway/sc1/config_right.json
 ```
 
@@ -56,13 +56,13 @@ You may also check Demo notebook `Demo.ipynb`.
     * The configuration of each scenario is in `realworld_trace_configs.zip`
 * Run the experiments for all scenarios. Please set `road_type` and `scenario_number`.
 ```bash
-### attack to left
+### attack to the left
 python run_patch_generation.py data/scenarios/${road_type}/sc${scenario_number}/config_left.json
-### attakc to right
+### attack to the right
 python run_patch_generation.py data/scenarios/${road_type}/sc${scenario_number}/config_right.json
 ```
 
-### Reproduction of Defenses and Baseline Attcks
+### Reproduction of Defenses and Baseline Attacks
 
 The code for each defenses and baseline attacks is in the following branch.
 
@@ -83,11 +83,11 @@ The code for each defenses and baseline attacks is in the following branch.
 
 ## Software-in-the-Loop Simulation
 
-* Generate a patch with this DRP attack code as in real-World trace-based evaluation.
+* Generate a patch with this DRP attack code as in real-world trace-based evaluation.
 * Convert the obtained patch with the color mapping to handle the difference between printed color and observed color.
     * Apply the same methodology described in `Color_map_creation_for_physical_world_exp.ipynb`.
-* Place the obtained  in LGSVL simulator and run OpenPilot with LGSVL bridge.
-    * Detailed setups are descrived in the [OpenPilot-LGSVL bridge repository](https://github.com/ASGuard-UCI/openpilot/blob/lgsvl_bridge/README_DRP_ATTACK.md).
+* Place the obtained patch in the LGSVL simulator and run OpenPilot with our OpenPilot-LGSVL bridge.
+    * Detailed setups are described in the [OpenPilot-LGSVL bridge repository](https://github.com/ASGuard-UCI/openpilot/blob/lgsvl_bridge/README_DRP_ATTACK.md).
 
 
 
@@ -104,5 +104,5 @@ The code for each defenses and baseline attacks is in the following branch.
 
 # Acknowledgement
 
-Great thanks to [OpenPilot](https://github.com/commaai/openpilot), [Comma2k19 dataset](https://github.com/commaai/comma2k19), [TensorFlow](https://github.com/tensorflow/tensorflow), and all other libraries we use.
+Great thanks to [OpenPilot](https://github.com/commaai/openpilot), [Comma2k19 dataset](https://github.com/commaai/comma2k19), [LGSVL](https://github.com/lgsvl/simulator), [TensorFlow](https://github.com/tensorflow/tensorflow), and all other libraries.
 
